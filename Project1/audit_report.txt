@@ -1,0 +1,75 @@
+============================================================
+        CREDENTIAL HYGIENE AUDIT REPORT (SANITIZED)        
+        Raw Passwords Excluded | Assessment Findings Only   
+============================================================
+Source File      : C:\Users\grimr\OneDrive\Desktop\School\CARE10 Final Project\PasswordChecker\Project1\Data\sample_credentials.txt
+Lines Read       : 12
+Empty Skipped    : 4
+High Risk        : 3
+Medium Risk      : 4
+Low Risk         : 1
+Reused Entries   : 2
+------------------------------------------------------------
+FINDINGS & WEAKNESS ANALYSIS
+------------------------------------------------------------
+  Credential #1 (length=11)
+    Risk Level : HIGH
+    Status     : FLAGGED (WEAKNESS DETECTED)
+    Details    :
+      - Moderate length (< 12 chars)
+      - Matches common or substituted pattern
+      - Predictable suffix pattern
+      - Reused across entries (x2)
+
+  Credential #2 (length=14)
+    Risk Level : MEDIUM
+    Status     : FLAGGED (WEAKNESS DETECTED)
+    Details    :
+      - Predictable suffix pattern
+
+  Credential #3 (length=11)
+    Risk Level : MEDIUM
+    Status     : FLAGGED (WEAKNESS DETECTED)
+    Details    :
+      - Moderate length (< 12 chars)
+      - Predictable seasonal or year pattern
+      - Predictable suffix pattern
+
+  Credential #4 (length=11)
+    Risk Level : HIGH
+    Status     : FLAGGED (WEAKNESS DETECTED)
+    Details    :
+      - Moderate length (< 12 chars)
+      - Matches common or substituted pattern
+      - Predictable suffix pattern
+      - Reused across entries (x2)
+
+  Credential #5 (length=6)
+    Risk Level : HIGH
+    Status     : FLAGGED (WEAKNESS DETECTED)
+    Details    :
+      - Short length (< 8 chars)
+      - Limited character variety
+      - Matches common or substituted pattern
+
+  Credential #6 (length=12)
+    Risk Level : MEDIUM
+    Status     : FLAGGED (WEAKNESS DETECTED)
+    Details    :
+      - Predictable suffix pattern
+
+  Credential #7 (length=9)
+    Risk Level : MEDIUM
+    Status     : FLAGGED (WEAKNESS DETECTED)
+    Details    :
+      - Moderate length (< 12 chars)
+      - Limited character variety
+      - Contains repeated character run
+
+  Credential #8 (length=35)
+    Risk Level : LOW
+    Status     : PASS (LOW RISK)
+    Details    :
+      - Strong password: good length, variety, and no common issues detected
+
+============================================================

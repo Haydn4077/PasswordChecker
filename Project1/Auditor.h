@@ -10,6 +10,11 @@ enum class RiskLevel {
     High
 };
 
+enum class PolicyProfile {
+    Standard,
+    HighPrivilege
+};
+
 struct AuditFinding {
     string label;
     RiskLevel risk = RiskLevel::Low;
@@ -29,11 +34,12 @@ struct AuditReport {
 
 class CredentialAuditor {
 public:
-    AuditReport auditEntries(const vector<string>& rawLines) const;
+    AuditReport auditEntries(const vector<string>& rawLines,
+        PolicyProfile profile = PolicyProfile::Standard) const;
     static string riskToString(RiskLevel level);
+    static string trimLine(const string& line);
 
 private:
-    static string trimLine(const string& line);
     static bool containsCommonPattern(const string& lowerPwd);
     static bool hasRepeatedRun(const string& pwd, int runLength = 3);
 };

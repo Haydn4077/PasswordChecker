@@ -5,6 +5,87 @@
 
 using namespace std;
 
+namespace {
+
+    string normalizeLeetspeakLower(const string& s) {
+        string out;
+        out.reserve(s.size());
+        for (unsigned char raw : s) {
+            char ch = static_cast<char>(tolower(raw));
+            switch (ch) {
+            case '@': out.push_back('a'); break;
+            case '0': out.push_back('o'); break;
+            case '1':
+            case '!': out.push_back('i'); break;
+            case '3': out.push_back('e'); break;
+            case '$': out.push_back('s'); break;
+            default:  out.push_back(ch); break;
+            }
+        }
+        return out;
+    }
+
+    bool hasSeasonalOrYearHabit(const string& text) {
+        static const vector<string> seasons = {
+            "spring", "summer", "fall", "autumn", "winter"
+        };
+        static const vector<string> years = {
+            "2020", "2021", "2022", "2023", "2024", "2025", "2026"
+        };
+
+        for (const string& season : seasons) {
+            if (text.find(season) != string::npos) {
+                return true;
+            }
+        }
+        for (const string& year : years) {
+            if (text.find(year) != string::npos) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool hasPredictableSuffix(const string& entry) {
+        if (entry.size() < 3) {
+            return false;
+        }
+
+        size_t pos = entry.size();
+
+        size_t punctCount = 0;
+        while (pos > 0 && punctCount < 2 &&
+            (entry[pos - 1] == '!' || entry[pos - 1] == '.' || entry[pos - 1] == '?')) {
+            --pos;
+            ++punctCount;
+        }
+
+        size_t digitCount = 0;
+        while (pos > 0 && digitCount < 4 &&
+            isdigit(static_cast<unsigned char>(entry[pos - 1]))) {
+            --pos;
+            ++digitCount;
+        }
+
+        if (digitCount == 0 && punctCount == 0) {
+            return false;
+        }
+        if (pos < 2) {
+            return false;
+        }
+
+        size_t alphaPrefix = 0;
+        for (size_t i = 0; i < pos; ++i) {
+            if (isalpha(static_cast<unsigned char>(entry[i]))) {
+                ++alphaPrefix;
+            }
+        }
+
+        return alphaPrefix >= 2;
+    }
+
+}
+
 string CredentialAuditor::trimLine(const string& line) {
     string cleaned = line;
     if (!cleaned.empty() && cleaned.back() == '\r') {
@@ -66,7 +147,7 @@ string CredentialAuditor::riskToString(RiskLevel level) {
     }
 }
 
-AuditReport CredentialAuditor::auditEntries(const vector<string>& rawLines) const {
+AuditReport CredentialAuditor::auditEntries(const vector<string>& rawLines, PolicyProfile profile) const {
     AuditReport report;
     vector<string> normalizedEntries;
     unordered_map<string, int> frequencyMap;
@@ -82,11 +163,17 @@ AuditReport CredentialAuditor::auditEntries(const vector<string>& rawLines) cons
         ++frequencyMap[trimmed];
     }
 
+    const bool highPriv = (profile == PolicyProfile::HighPrivilege);
+    const size_t minHighLen = highPriv ? 14 : 8;
+    const size_t minMedLen = highPriv ? 14 : 12;
+    const int minClasses = highPriv ? 4 : 3;
+
     for (size_t i = 0; i < normalizedEntries.size(); ++i) {
         const string& pwd = normalizedEntries[i];
         string lowerPwd = pwd;
         transform(lowerPwd.begin(), lowerPwd.end(), lowerPwd.begin(),
             [](unsigned char c) { return static_cast<char>(tolower(c)); });
+        string leetPwd = normalizeLeetspeakLower(pwd);
 
         AuditFinding finding;
         finding.label = "Credential #" + to_string(i + 1) + " (length=" + to_string(pwd.size()) + ")";
@@ -102,19 +189,30 @@ AuditReport CredentialAuditor::auditEntries(const vector<string>& rawLines) cons
 
         int classCount = (hasUpper ? 1 : 0) + (hasLower ? 1 : 0) + (hasDigit ? 1 : 0) + (hasSymbol ? 1 : 0);
 
-        if (pwd.size() < 8) {
-            finding.reasons.push_back("Short length (< 8 chars)");
+        if (pwd.size() < minHighLen) {
+            finding.reasons.push_back("Short length (< " + to_string(minHighLen) + " chars)");
         }
-        else if (pwd.size() < 12) {
-            finding.reasons.push_back("Moderate length (< 12 chars)");
-        }
-
-        if (classCount < 3) {
-            finding.reasons.push_back("Limited character variety");
+        else if (pwd.size() < minMedLen) {
+            finding.reasons.push_back("Moderate length (< " + to_string(minMedLen) + " chars)");
         }
 
-        if (containsCommonPattern(lowerPwd)) {
-            finding.reasons.push_back("Matches common weak pattern");
+        if (classCount < minClasses) {
+            finding.reasons.push_back(highPriv
+                ? "High-privilege profile requires all 4 character classes"
+                : "Limited character variety");
+        }
+
+        bool commonHit = containsCommonPattern(lowerPwd) || containsCommonPattern(leetPwd);
+        if (commonHit) {
+            finding.reasons.push_back("Matches common or substituted pattern");
+        }
+
+        if (hasSeasonalOrYearHabit(lowerPwd) || hasSeasonalOrYearHabit(leetPwd)) {
+            finding.reasons.push_back("Predictable seasonal or year pattern");
+        }
+
+        if (hasPredictableSuffix(pwd)) {
+            finding.reasons.push_back("Predictable suffix pattern");
         }
 
         if (hasRepeatedRun(pwd)) {
@@ -126,7 +224,10 @@ AuditReport CredentialAuditor::auditEntries(const vector<string>& rawLines) cons
             ++report.reusedEntryCount;
         }
 
-        if (containsCommonPattern(lowerPwd) || pwd.size() < 8 || finding.reuseCount >= 3) {
+        bool isHighRisk = commonHit || pwd.size() < minHighLen || finding.reuseCount >= 3 ||
+            (highPriv && !finding.reasons.empty());
+
+        if (isHighRisk) {
             finding.risk = RiskLevel::High;
             ++report.highRiskCount;
         }
@@ -136,7 +237,9 @@ AuditReport CredentialAuditor::auditEntries(const vector<string>& rawLines) cons
         }
         else {
             finding.risk = RiskLevel::Low;
-            finding.reasons.push_back("Strong password: good length, variety, and no common issues detected");
+            finding.reasons.push_back(highPriv
+                ? "Approved for high-privilege access: meets strict length, variety, and pattern checks"
+                : "Strong password: good length, variety, and no common issues detected");
             ++report.lowRiskCount;
         }
 
