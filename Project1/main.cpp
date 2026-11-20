@@ -1,3 +1,4 @@
+#include "Auditor.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -27,6 +28,25 @@ int main(int argc, char* argv[]) {
         lines.push_back(line);
     }
 
-    cout << "Password & Credential Hygiene Auditor (Week 11 Baseline)\n";
-    cout << "Loaded " << lines.size() << " line(s) from '" << filePath << "'.\n";
+    CredentialAuditor auditor;
+    AuditReport report = auditor.auditEntries(lines);
+
+    cout << "\n=== Credential Hygiene Audit Summary ===\n";
+    cout << "Lines read:       " << report.totalLinesRead << "\n";
+    cout << "High risk:        " << report.highRiskCount << "\n";
+    cout << "Medium risk:      " << report.mediumRiskCount << "\n";
+    cout << "Low risk:         " << report.lowRiskCount << "\n";
+    cout << "Reused entries:   " << report.reusedEntryCount << "\n\n";
+
+    for (const auto& item : report.findings) {
+        cout << "[" << CredentialAuditor::riskToString(item.risk) << "] " << item.label;
+        if (!item.reasons.empty()) {
+            cout << " -> ";
+            for (size_t i = 0; i < item.reasons.size(); ++i) {
+                if (i > 0) cout << "; ";
+                cout << item.reasons[i];
+            }
+        }
+        cout << "\n";
+    }
 }
