@@ -34,5 +34,6 @@
     <Text Include="Data\sample_credentials.txt">
       <Filter>Data</Filter>
     </Text>
+    <Text Include="README.txt" />
   </ItemGroup>
 </Project>

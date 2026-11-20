@@ -131,6 +131,7 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="Data\sample_credentials.txt" />
+    <Text Include="README.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

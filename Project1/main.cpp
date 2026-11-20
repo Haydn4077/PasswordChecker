@@ -1,15 +1,70 @@
 #include "Auditor.h"
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <random>
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
 using namespace std;
 
 namespace {
+
+    namespace Ansi {
+        constexpr const char* Reset = "\033[0m";
+        constexpr const char* Bold = "\033[1m";
+        constexpr const char* Cyan = "\033[36m";
+        constexpr const char* Green = "\033[32m";
+        constexpr const char* Yellow = "\033[33m";
+        constexpr const char* Red = "\033[31m";
+    }
+
+    bool stdoutSupportsAnsi() {
+#if defined(_WIN32)
+        int fd = _fileno(stdout);
+        return fd >= 0 && _isatty(fd) != 0;
+#else
+        return isatty(STDOUT_FILENO) != 0;
+#endif
+    }
+
+    string paint(const string& text, const char* ansiCode, bool enabled) {
+        if (!enabled || ansiCode == nullptr || *ansiCode == '\0') {
+            return text;
+        }
+        return string(ansiCode) + text + Ansi::Reset;
+    }
+
+    string formatRiskBadge(RiskLevel level, bool useColor) {
+        string label = "[" + CredentialAuditor::riskToString(level) + "]";
+        if (!useColor) {
+            return label;
+        }
+        switch (level) {
+        case RiskLevel::High:
+            return string(Ansi::Bold) + Ansi::Red + label + Ansi::Reset;
+        case RiskLevel::Medium:
+            return string(Ansi::Bold) + Ansi::Yellow + label + Ansi::Reset;
+        case RiskLevel::Low:
+        default:
+            return string(Ansi::Bold) + Ansi::Green + label + Ansi::Reset;
+        }
+    }
+
+    string formatHeader(const string& text, bool useColor) {
+        if (!useColor) {
+            return text;
+        }
+        return string(Ansi::Bold) + Ansi::Cyan + text + Ansi::Reset;
+    }
 
     string toLowerCopy(const string& s) {
         string out = s;
@@ -149,18 +204,22 @@ namespace {
         }
     }
 
-    void printFindingBlock(ostream& out, const AuditFinding& item, bool showAccessPolicy) {
-        string status = (item.risk == RiskLevel::Low) ? "PASS (LOW RISK)" : "FLAGGED (WEAKNESS DETECTED)";
-        out << "  " << item.label << "\n";
-        out << "    Risk Level : " << CredentialAuditor::riskToString(item.risk) << "\n";
-        out << "    Status     : " << status << "\n";
+    void printFindingBlock(ostream& out, const AuditFinding& item, bool showAccessPolicy, bool useColor) {
+        string statusText = (item.risk == RiskLevel::Low)
+            ? paint("PASS (LOW RISK)", Ansi::Green, useColor)
+            : paint("FLAGGED (WEAKNESS DETECTED)", (item.risk == RiskLevel::High ? Ansi::Red : Ansi::Yellow), useColor);
+
+        out << "  " << formatRiskBadge(item.risk, useColor) << " " << item.label << "\n";
+        out << "    Status     : " << statusText << "\n";
 
         if (showAccessPolicy) {
             if (item.risk == RiskLevel::Low) {
-                out << "    Access     : ALLOWED (meets High-Privilege LOW-risk requirement)\n";
+                out << "    Access     : " << paint("ALLOWED", Ansi::Green, useColor)
+                    << " (meets High-Privilege LOW-risk requirement)\n";
             }
             else {
-                out << "    Access     : REJECTED (only LOW-risk credentials allowed for High-Privilege access)\n";
+                out << "    Access     : " << paint("REJECTED", Ansi::Red, useColor)
+                    << " (only LOW-risk credentials allowed for High-Privilege access)\n";
             }
         }
 
@@ -199,7 +258,7 @@ namespace {
         }
         else {
             for (const auto& item : report.findings) {
-                printFindingBlock(outFile, item, false);
+                printFindingBlock(outFile, item, false, false);
                 outFile << "\n";
             }
         }
@@ -278,14 +337,14 @@ namespace {
         return "K9#mP2$vL8@xQ4!nZ7";
     }
 
-    void runInteractivePasswordCheck(CredentialAuditor& auditor) {
-        cout << "\n============================================================\n";
-        cout << "        INTERACTIVE PASSWORD ASSESSMENT (NO LOGGING)        \n";
-        cout << "============================================================\n";
+    void runInteractivePasswordCheck(CredentialAuditor& auditor, bool useColor) {
+        cout << "\n" << formatHeader("============================================================", useColor) << "\n";
+        cout << formatHeader("        INTERACTIVE PASSWORD ASSESSMENT (NO LOGGING)        ", useColor) << "\n";
+        cout << formatHeader("============================================================", useColor) << "\n";
         PolicyProfile profile = askPolicyProfile();
 
         while (true) {
-            cout << "\nActive Profile: " << profileName(profile) << "\n";
+            cout << "\nActive Profile: " << formatHeader(profileName(profile), useColor) << "\n";
             cout << "Enter password to evaluate: ";
             string input;
             if (!getline(cin, input)) {
@@ -298,13 +357,13 @@ namespace {
             }
             else {
                 const AuditFinding& item = report.findings.front();
-                cout << "\n--- Assessment Result ---\n";
-                printFindingBlock(cout, item, profile == PolicyProfile::HighPrivilege);
+                cout << "\n" << formatHeader("--- Assessment Result ---", useColor) << "\n";
+                printFindingBlock(cout, item, profile == PolicyProfile::HighPrivilege, useColor);
 
                 if (item.risk != RiskLevel::Low) {
                     if (askYesNo("\nGenerate a suggested LOW-risk password? (y/n): ")) {
                         string suggestion = generateLowRiskPassword(auditor, profile);
-                        cout << "\n  Suggested Password : " << suggestion << "\n";
+                        cout << "\n  Suggested Password : " << paint(suggestion, Ansi::Green, useColor) << "\n";
                         cout << "  Privacy Note       : Shown once on screen only; never logged or saved.\n";
                     }
                 }
@@ -319,7 +378,7 @@ namespace {
         }
     }
 
-    int runFileAudit(CredentialAuditor& auditor, int argc, char* argv[], bool allowMenuReturn, bool& returnToMenu) {
+    int runFileAudit(CredentialAuditor& auditor, int argc, char* argv[], bool allowMenuReturn, bool& returnToMenu, bool useColor) {
         returnToMenu = false;
         bool useCliArg = (argc > 1);
 
@@ -347,7 +406,7 @@ namespace {
                     break;
                 }
 
-                cerr << "\nError: Could not open file '" << filePath << "'.\n";
+                cerr << "\n" << paint("Error: Could not open file '" + filePath + "'.", Ansi::Red, useColor) << "\n";
                 if (!askYesNo("Try another file path? (y/n): ")) {
                     if (allowMenuReturn && askYesNo("Return to main menu? (y/n): ")) {
                         returnToMenu = true;
@@ -369,15 +428,15 @@ namespace {
 
             AuditReport report = auditor.auditEntries(lines);
 
-            cout << "\n============================================================\n";
-            cout << "        CREDENTIAL HYGIENE AUDIT SUMMARY (NO LOGGING)        \n";
-            cout << "============================================================\n";
+            cout << "\n" << formatHeader("============================================================", useColor) << "\n";
+            cout << formatHeader("        CREDENTIAL HYGIENE AUDIT SUMMARY (NO LOGGING)        ", useColor) << "\n";
+            cout << formatHeader("============================================================", useColor) << "\n";
             cout << "  Source File    : " << filePath << "\n";
             cout << "  Lines Read     : " << report.totalLinesRead << "\n";
             cout << "  Empty Skipped  : " << report.skippedEmptyLines << "\n";
-            cout << "  High Risk      : " << report.highRiskCount << "\n";
-            cout << "  Medium Risk    : " << report.mediumRiskCount << "\n";
-            cout << "  Low Risk       : " << report.lowRiskCount << "\n";
+            cout << "  High Risk      : " << paint(to_string(report.highRiskCount), Ansi::Red, useColor) << "\n";
+            cout << "  Medium Risk    : " << paint(to_string(report.mediumRiskCount), Ansi::Yellow, useColor) << "\n";
+            cout << "  Low Risk       : " << paint(to_string(report.lowRiskCount), Ansi::Green, useColor) << "\n";
             cout << "  Reused Entries : " << report.reusedEntryCount << "\n";
 
             if (report.findings.empty()) {
@@ -385,7 +444,7 @@ namespace {
             }
             else {
                 int filterChoice = askDisplayFilter();
-                cout << "\n--- Detailed Findings ---\n";
+                cout << "\n" << formatHeader("--- Detailed Findings ---", useColor) << "\n";
 
                 int shownCount = 0;
                 for (const auto& item : report.findings) {
@@ -396,7 +455,7 @@ namespace {
                         continue;
                     }
 
-                    printFindingBlock(cout, item, false);
+                    printFindingBlock(cout, item, false, useColor);
                     cout << "\n";
                     ++shownCount;
                 }
@@ -420,17 +479,18 @@ namespace {
 }
 
 int main(int argc, char* argv[]) {
+    const bool useColor = stdoutSupportsAnsi();
     CredentialAuditor auditor;
 
     if (argc > 1) {
         bool returnToMenu = false;
-        return runFileAudit(auditor, argc, argv, false, returnToMenu);
+        return runFileAudit(auditor, argc, argv, false, returnToMenu, useColor);
     }
 
     while (true) {
-        cout << "\n============================================================\n";
-        cout << "        PASSWORD & CREDENTIAL HYGIENE AUDITOR              \n";
-        cout << "============================================================\n";
+        cout << "\n" << formatHeader("============================================================", useColor) << "\n";
+        cout << formatHeader("        PASSWORD & CREDENTIAL HYGIENE AUDITOR              ", useColor) << "\n";
+        cout << formatHeader("============================================================", useColor) << "\n";
         cout << "  1. Audit credentials from a file\n";
         cout << "  2. Check password strength level\n";
         cout << "Choice: ";
@@ -439,7 +499,7 @@ int main(int argc, char* argv[]) {
         if (!(cin >> choice)) {
             cin.clear();
             cin.ignore(10000, '\n');
-            cerr << "\nInvalid selection.\n";
+            cerr << "\n" << paint("Invalid selection.", Ansi::Red, useColor) << "\n";
             if (!askYesNo("Try selecting a mode again? (y/n): ")) {
                 return 1;
             }
@@ -449,14 +509,14 @@ int main(int argc, char* argv[]) {
         cin.ignore(10000, '\n');
 
         if (choice == 2) {
-            runInteractivePasswordCheck(auditor);
+            runInteractivePasswordCheck(auditor, useColor);
             if (!askYesNo("\nReturn to main menu? (y/n): ")) {
                 return 0;
             }
         }
         else if (choice == 1) {
             bool returnToMenu = false;
-            int status = runFileAudit(auditor, argc, argv, true, returnToMenu);
+            int status = runFileAudit(auditor, argc, argv, true, returnToMenu, useColor);
             if (status != 0) {
                 return status;
             }
@@ -465,7 +525,7 @@ int main(int argc, char* argv[]) {
             }
         }
         else {
-            cerr << "\nUnknown option.\n";
+            cerr << "\n" << paint("Unknown option.", Ansi::Red, useColor) << "\n";
             if (!askYesNo("Try selecting a mode again? (y/n): ")) {
                 return 1;
             }
