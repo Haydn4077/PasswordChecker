@@ -198,7 +198,7 @@ AuditReport CredentialAuditor::auditEntries(const vector<string>& rawLines, Poli
 
         if (classCount < minClasses) {
             finding.reasons.push_back(highPriv
-                ? "High-privilege profile requires all 4 character classes"
+                ? "High-privilege profile requires all 4 character classes (Pp1!)"
                 : "Limited character variety");
         }
 
