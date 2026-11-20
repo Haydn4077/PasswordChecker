@@ -31,8 +31,9 @@ int main(int argc, char* argv[]) {
     CredentialAuditor auditor;
     AuditReport report = auditor.auditEntries(lines);
 
-    cout << "\n=== Credential Hygiene Audit Summary ===\n";
+    cout << "\n=== Credential Hygiene Audit Summary (No Raw Passwords Logged) ===\n";
     cout << "Lines read:       " << report.totalLinesRead << "\n";
+    cout << "Empty skipped:    " << report.skippedEmptyLines << "\n";
     cout << "High risk:        " << report.highRiskCount << "\n";
     cout << "Medium risk:      " << report.mediumRiskCount << "\n";
     cout << "Low risk:         " << report.lowRiskCount << "\n";

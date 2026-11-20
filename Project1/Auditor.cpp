@@ -5,6 +5,25 @@
 
 using namespace std;
 
+string CredentialAuditor::trimLine(const string& line) {
+    string cleaned = line;
+    if (!cleaned.empty() && cleaned.back() == '\r') {
+        cleaned.pop_back();
+    }
+
+    size_t start = 0;
+    while (start < cleaned.size() && isspace(static_cast<unsigned char>(cleaned[start]))) {
+        ++start;
+    }
+
+    size_t end = cleaned.size();
+    while (end > start && isspace(static_cast<unsigned char>(cleaned[end - 1]))) {
+        --end;
+    }
+
+    return cleaned.substr(start, end - start);
+}
+
 bool CredentialAuditor::containsCommonPattern(const string& lowerPwd) {
     static const vector<string> commonTokens = {
         "password", "passwd", "123456", "12345678", "qwerty", "admin", "letmein", "welcome"
@@ -49,15 +68,22 @@ string CredentialAuditor::riskToString(RiskLevel level) {
 
 AuditReport CredentialAuditor::auditEntries(const vector<string>& rawLines) const {
     AuditReport report;
+    vector<string> normalizedEntries;
     unordered_map<string, int> frequencyMap;
 
-    for (const auto& entry : rawLines) {
+    for (const auto& raw : rawLines) {
         ++report.totalLinesRead;
-        ++frequencyMap[entry];
+        string trimmed = trimLine(raw);
+        if (trimmed.empty()) {
+            ++report.skippedEmptyLines;
+            continue;
+        }
+        normalizedEntries.push_back(trimmed);
+        ++frequencyMap[trimmed];
     }
 
-    for (size_t i = 0; i < rawLines.size(); ++i) {
-        const string& pwd = rawLines[i];
+    for (size_t i = 0; i < normalizedEntries.size(); ++i) {
+        const string& pwd = normalizedEntries[i];
         string lowerPwd = pwd;
         transform(lowerPwd.begin(), lowerPwd.end(), lowerPwd.begin(),
             [](unsigned char c) { return static_cast<char>(tolower(c)); });

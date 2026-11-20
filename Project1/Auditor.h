@@ -19,6 +19,7 @@ struct AuditFinding {
 
 struct AuditReport {
     int totalLinesRead = 0;
+    int skippedEmptyLines = 0;
     int highRiskCount = 0;
     int mediumRiskCount = 0;
     int lowRiskCount = 0;
@@ -32,6 +33,7 @@ public:
     static string riskToString(RiskLevel level);
 
 private:
+    static string trimLine(const string& line);
     static bool containsCommonPattern(const string& lowerPwd);
     static bool hasRepeatedRun(const string& pwd, int runLength = 3);
 };
